@@ -1,18 +1,28 @@
 const express = require("express");
-const { Inngest, serve } = require("inngest");
+const { Inngest } = require("inngest");
+const { serve } = require("inngest/express");
 
 const app = express();
 app.use(express.json());
 
-const inngest = new Inngest({ id: "report-api" });
+process.env.INNGEST_DEV = "1";
+
+const inngest = new Inngest({
+  id: "report-api",
+  isDev: true,
+  baseUrl: process.env.INNGEST_BASE_URL || "http://127.0.0.1:8288",
+});
 
 // In-memory storage for reports
 const reports = new Map();
 
 // Stage 1: say-hello function
 const sayHello = inngest.createFunction(
-  { id: "say-hello", name: "Say Hello Background Function" },
-  { event: "test/hello" },
+  {
+    id: "say-hello",
+    name: "Say Hello Background Function",
+    triggers: [{ event: "test/hello" }],
+  },
   async ({ step }) => {
     await step.sleep("sleep-5-seconds", "5s");
     return "Hello from the background!";
@@ -24,13 +34,13 @@ const makeReport = inngest.createFunction(
   {
     id: "make-report",
     name: "Make Report Generator",
+    triggers: [{ event: "report/requested" }],
     retries: 2,
   },
-  { event: "report/requested" },
   async ({ event, step }) => {
     const { id, topic } = event.data;
 
-    // Simulate 8s of slow background work (AI processing / large export)
+    // Simulate 8s of slow background work
     await step.sleep("do-the-slow-work", "8s");
 
     const reportResult = await step.run("build-report", async () => {
@@ -63,8 +73,8 @@ const heartbeat = inngest.createFunction(
   {
     id: "heartbeat",
     name: "System Heartbeat Cron",
+    triggers: [{ cron: "* * * * *" }],
   },
-  { cron: "* * * * *" },
   async ({ step }) => {
     return await step.run("log-summary", async () => {
       let pending = 0;
